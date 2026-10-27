@@ -1,10 +1,12 @@
 // server/src/server.js
-// Entry point.
-// Strategy: Start the HTTP server first so /api/health is always reachable,
-// then connect to MongoDB. If the DB connection fails, we log an error
-// but keep serving (routes that need DB will fail gracefully per-request).
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-import 'dotenv/config';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
 import app from './app.js';
 import { connectDB } from './config/db.js';
 
