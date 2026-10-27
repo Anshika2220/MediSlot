@@ -75,7 +75,7 @@ export default function Home() {
             and book in seconds with atomic double-booking protection.
           </p>
 
-          <div className="flex flex-wrap items-center justify-center gap-3 text-xs">
+          <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
             <span className="flex items-center gap-1.5 text-[var(--muted)]">
               <ShieldCheck size={15} className="text-[var(--accent)]" />
               Guaranteed Zero Collisions
@@ -96,18 +96,18 @@ export default function Home() {
 
       {/* Doctor Discovery Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
             <h2 className="text-xl font-bold text-[var(--text)] mb-1">
               Find a Clinic Specialist
             </h2>
             <p className="text-xs text-[var(--muted)]">
-              Filter by specialty or search by doctor name
+              Filter by medical specialty or search by doctor name
             </p>
           </div>
 
           {/* Search Box */}
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full sm:w-80">
             <Search
               size={15}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]"
@@ -117,26 +117,26 @@ export default function Home() {
               placeholder="Search doctor or specialty…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 text-xs py-2"
+              style={{ paddingLeft: '2.4rem' }}
             />
           </div>
         </div>
 
         {/* Specialty Filter Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-6 scrollbar-none">
-          {specialties.map((spec) => (
-            <button
-              key={spec}
-              onClick={() => setSelectedSpecialty(spec)}
-              className={`py-1.5 px-3.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all border ${
-                selectedSpecialty === spec
-                  ? 'border-[var(--accent)] bg-[var(--accent)] text-[#1A1A1A] shadow-md font-bold'
-                  : 'border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--text)] hover:border-[#4a4a4a]'
-              }`}
-            >
-              {spec}
-            </button>
-          ))}
+        <div className="flex items-center gap-2.5 overflow-x-auto pb-4 mb-8">
+          {specialties.map((spec) => {
+            const isActive = selectedSpecialty === spec;
+            return (
+              <button
+                key={spec}
+                type="button"
+                onClick={() => setSelectedSpecialty(spec)}
+                className={`filter-pill ${isActive ? 'active' : ''}`}
+              >
+                {spec}
+              </button>
+            );
+          })}
         </div>
 
         {/* Doctors Grid */}
@@ -162,14 +162,14 @@ export default function Home() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredDoctors.map((doc) => (
               <div
                 key={doc._id}
                 className="card p-6 flex flex-col justify-between hover:border-[var(--accent)] transition-all group"
               >
                 <div>
-                  <div className="flex items-start justify-between gap-3 mb-2.5">
+                  <div className="flex items-start justify-between gap-3 mb-3">
                     <div>
                       <h3 className="font-bold text-base text-[var(--text)] group-hover:text-[var(--accent)] transition-colors">
                         {doc.name}
@@ -177,22 +177,25 @@ export default function Home() {
                       <span className="badge badge-accent mt-1">{doc.specialty}</span>
                     </div>
 
-                    <span className="text-sm font-extrabold text-[var(--accent)] shrink-0">
-                      ₹{doc.consultationFee}
-                    </span>
+                    <div className="text-right shrink-0">
+                      <span className="text-xs text-[var(--muted)] block">Fee</span>
+                      <span className="text-base font-extrabold text-[var(--accent)]">
+                        ₹{doc.consultationFee}
+                      </span>
+                    </div>
                   </div>
 
-                  <p className="text-xs text-[var(--muted)] line-clamp-2 leading-relaxed mb-4">
+                  <p className="text-xs text-[var(--muted)] line-clamp-2 leading-relaxed mb-6">
                     {doc.bio || 'Consulting specialist at MediSlot Clinic.'}
                   </p>
                 </div>
 
                 <div className="pt-4 border-t border-[var(--border)] flex items-center justify-between">
-                  <div className="text-[11px] text-[var(--muted)] flex items-center gap-1.5">
+                  <div className="text-[11px] text-[var(--muted)] flex items-center gap-2">
                     <Clock size={13} className="text-[var(--accent)]" />
                     <span>{doc.slotDuration}-min slots</span>
                     <span>•</span>
-                    <span>{doc.experienceYears || 5} yrs exp</span>
+                    <span>{doc.experienceYears || 5} yrs</span>
                   </div>
 
                   <Link
@@ -208,18 +211,20 @@ export default function Home() {
           </div>
         )}
 
-        {/* Clinic Doctor Registration Banner */}
-        <div className="mt-16 card p-8 border-[var(--border)] bg-[var(--surface)] text-center max-w-2xl mx-auto">
-          <UserCheck size={32} className="mx-auto mb-3 text-[var(--accent)]" />
-          <h3 className="text-base font-bold text-[var(--text)] mb-1">
-            Are you a Doctor or Clinic Specialist?
-          </h3>
-          <p className="text-xs text-[var(--muted)] mb-5 max-w-md mx-auto">
-            Register your practice on MediSlot. Set your consultation fee, 15 or 30-minute slot durations, and start receiving bookings today.
-          </p>
-          <Link to="/register" className="btn btn-secondary text-xs">
-            Onboard as a Doctor
-          </Link>
+        {/* Clinic Doctor Registration Banner (Centered beneath grid) */}
+        <div className="mt-16 max-w-2xl mx-auto">
+          <div className="card p-8 border-[var(--border)] bg-[var(--surface)] text-center">
+            <UserCheck size={32} className="mx-auto mb-3 text-[var(--accent)]" />
+            <h3 className="text-base font-bold text-[var(--text)] mb-1">
+              Are you a Doctor or Clinic Specialist?
+            </h3>
+            <p className="text-xs text-[var(--muted)] mb-5 max-w-md mx-auto">
+              Register your practice on MediSlot. Set your consultation fee, 15 or 30-minute slot durations, and start receiving bookings today.
+            </p>
+            <Link to="/register" className="btn btn-secondary text-xs">
+              Onboard as a Doctor
+            </Link>
+          </div>
         </div>
       </main>
     </div>
