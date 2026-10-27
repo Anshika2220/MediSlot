@@ -1,8 +1,5 @@
 // client/src/services/api.js
-// Single configured Axios instance.
-// All components import from here — never hardcode the URL anywhere else.
-// Automatically attaches the JWT from localStorage on every request.
-
+// Single configured Axios instance using VITE_API_BASE_URL
 import axios from 'axios';
 
 const api = axios.create({
@@ -11,23 +8,26 @@ const api = axios.create({
   timeout: 15000,
 });
 
-// ── Request interceptor: attach JWT ───────────────────────────────────────
+// Request interceptor: attach JWT from localStorage
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('medislot_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// ── Response interceptor: normalize errors ────────────────────────────────
+// Response interceptor: redirect on expired token
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid — clear storage and redirect to login
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+    const isAuthRoute =
+      window.location.pathname.startsWith('/login') ||
+      window.location.pathname.startsWith('/register');
+
+    if (error.response?.status === 401 && !isAuthRoute && localStorage.getItem('medislot_token')) {
+      localStorage.removeItem('medislot_token');
+      localStorage.removeItem('medislot_user');
       window.location.href = '/login';
     }
     return Promise.reject(error);
