@@ -6,9 +6,17 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import 'dotenv/config';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 import healthRouter from './routes/health.js';
+import doctorRouter from './routes/doctorRoutes.js';
+import appointmentRouter from './routes/appointmentRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -28,10 +36,10 @@ app.use(express.urlencoded({ extended: true }));
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/health', healthRouter);
+app.use('/api/doctors', doctorRouter);
+app.use('/api/appointments', appointmentRouter);
 
-// Phase 3-9 routers will be imported here (auth, doctors, appointments, etc.)
-
-// DB connection status endpoint (always alive even before Mongoose connects)
+// DB ping endpoint
 app.get('/api/ping', (req, res) => res.json({ pong: true, ts: Date.now() }));
 
 // ── 404 catch-all ─────────────────────────────────────────────────────────────
