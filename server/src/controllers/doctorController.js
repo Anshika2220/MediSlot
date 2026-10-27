@@ -75,11 +75,22 @@ export async function getDoctorAvailability(req, res, next) {
 /**
  * PUT /api/doctors/:id/availability
  * Configure weekly schedule, slot duration (15/30), or blocked dates
+ * Enforces ownership: doctors can only modify their own schedule
  */
 export async function updateDoctorAvailability(req, res, next) {
   try {
     const { id } = req.params;
     const { slotDuration, weeklySchedule, blockedDates } = req.body;
+
+    // Check ownership if authenticated doctor
+    if (req.user && req.user.role === 'doctor') {
+      if (req.user.doctorId && req.user.doctorId.toString() !== id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only manage your own schedule and availability',
+        });
+      }
+    }
 
     const doctor = await Doctor.findById(id);
     if (!doctor) {

@@ -3,17 +3,21 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import app from '../app.js';
 import { connectDB } from '../config/db.js';
-import { Doctor } from '../models/index.js';
+import { Doctor, User } from '../models/index.js';
+import { generateToken } from '../services/authService.js';
 import mongoose from 'mongoose';
 
 describe('Doctor & Availability HTTP API Integration Tests', () => {
   let seededDoctorId;
+  let doctorToken;
 
   beforeAll(async () => {
     await connectDB();
     const doc = await Doctor.findOne();
     if (doc) {
       seededDoctorId = doc._id.toString();
+      const docUser = await User.findById(doc.userId);
+      doctorToken = generateToken(docUser, doc._id);
     }
   }, 30000);
 
@@ -61,9 +65,10 @@ describe('Doctor & Availability HTTP API Integration Tests', () => {
     expect(res.body.errors.some((e) => e.field === 'date')).toBe(true);
   });
 
-  it('PUT /api/doctors/:id/availability updates doctor slot duration', async () => {
+  it('PUT /api/doctors/:id/availability updates doctor slot duration with doctor auth', async () => {
     const res = await request(app)
       .put(`/api/doctors/${seededDoctorId}/availability`)
+      .set('Authorization', `Bearer ${doctorToken}`)
       .send({ slotDuration: 15 });
 
     expect(res.status).toBe(200);
@@ -72,5 +77,14 @@ describe('Doctor & Availability HTTP API Integration Tests', () => {
 
     // Revert back
     await Doctor.findByIdAndUpdate(seededDoctorId, { slotDuration: 30 });
+  });
+
+  it('PUT /api/doctors/:id/availability rejects unauthorized request without token', async () => {
+    const res = await request(app)
+      .put(`/api/doctors/${seededDoctorId}/availability`)
+      .send({ slotDuration: 15 });
+
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
   });
 });

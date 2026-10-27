@@ -7,6 +7,7 @@ import {
   updateDoctorAvailability,
 } from '../controllers/doctorController.js';
 import { validate } from '../middleware/validate.js';
+import { authenticate, authorize } from '../middleware/auth.js';
 import {
   getAvailableSlotsQuerySchema,
   updateAvailabilitySchema,
@@ -14,9 +15,18 @@ import {
 
 const router = Router();
 
+// Public doctor browsing
 router.get('/', getDoctors);
 router.get('/:id', getDoctorById);
 router.get('/:id/availability', validate(getAvailableSlotsQuerySchema, 'query'), getDoctorAvailability);
-router.put('/:id/availability', validate(updateAvailabilitySchema, 'body'), updateDoctorAvailability);
+
+// Doctor availability update: requires doctor login and ownership
+router.put(
+  '/:id/availability',
+  authenticate,
+  authorize('doctor'),
+  validate(updateAvailabilitySchema, 'body'),
+  updateDoctorAvailability
+);
 
 export default router;

@@ -10,6 +10,7 @@ import {
   updateStatusEndpoint,
 } from '../controllers/appointmentController.js';
 import { validate } from '../middleware/validate.js';
+import { authenticate, authorize } from '../middleware/auth.js';
 import { getAvailableSlotsQuerySchema } from '../validators/doctorValidator.js';
 import {
   createAppointmentSchema,
@@ -20,25 +21,48 @@ import {
 
 const router = Router();
 
-// 1. Get Available Slots (Patients & AI chatbot)
+// 1. Get Available Slots (Public for browsing & AI chatbot)
 router.get('/available-slots', validate(getAvailableSlotsQuerySchema, 'query'), getSlotsEndpoint);
 
-// 2. Book an Appointment
-router.post('/', validate(createAppointmentSchema, 'body'), bookAppointmentEndpoint);
+// 2. Book an Appointment (Patient only)
+router.post(
+  '/',
+  authenticate,
+  authorize('patient'),
+  validate(createAppointmentSchema, 'body'),
+  bookAppointmentEndpoint
+);
 
-// 3. Get Patient's upcoming and past appointments
-router.get('/my', getMyAppointmentsEndpoint);
+// 3. Get Patient's upcoming and past appointments (Patient only)
+router.get('/my', authenticate, authorize('patient'), getMyAppointmentsEndpoint);
 
-// 4. Get Doctor's appointments for today
-router.get('/doctor/today', getDoctorTodayEndpoint);
+// 4. Get Doctor's appointments for today (Doctor only)
+router.get('/doctor/today', authenticate, authorize('doctor'), getDoctorTodayEndpoint);
 
-// 5. Cancel an Appointment (subject to 2-hour restriction)
-router.patch('/:id/cancel', validate(cancelAppointmentSchema, 'body'), cancelAppointmentEndpoint);
+// 5. Cancel an Appointment (Patient or Doctor)
+router.patch(
+  '/:id/cancel',
+  authenticate,
+  validate(cancelAppointmentSchema, 'body'),
+  cancelAppointmentEndpoint
+);
 
-// 6. Reschedule an Appointment (subject to 2-hour restriction)
-router.patch('/:id/reschedule', validate(rescheduleAppointmentSchema, 'body'), rescheduleAppointmentEndpoint);
+// 6. Reschedule an Appointment (Patient only)
+router.patch(
+  '/:id/reschedule',
+  authenticate,
+  authorize('patient'),
+  validate(rescheduleAppointmentSchema, 'body'),
+  rescheduleAppointmentEndpoint
+);
 
-// 7. Update Status: 'completed' or 'no-show' (Doctor endpoint)
-router.patch('/:id/status', validate(updateStatusSchema, 'body'), updateStatusEndpoint);
+// 7. Update Status: 'completed' or 'no-show' (Doctor only)
+router.patch(
+  '/:id/status',
+  authenticate,
+  authorize('doctor'),
+  validate(updateStatusSchema, 'body'),
+  updateStatusEndpoint
+);
 
 export default router;

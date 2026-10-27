@@ -15,6 +15,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 import healthRouter from './routes/health.js';
+import authRouter from './routes/authRoutes.js';
 import doctorRouter from './routes/doctorRoutes.js';
 import appointmentRouter from './routes/appointmentRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -36,6 +37,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/health', healthRouter);
+app.use('/api/auth', authRouter);
 app.use('/api/doctors', doctorRouter);
 app.use('/api/appointments', appointmentRouter);
 
