@@ -1,33 +1,47 @@
 // server/src/tests/booking.test.js
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { connectDB } from '../config/db.js';
 import { Doctor, User, Appointment } from '../models/index.js';
 import * as bookingService from '../services/bookingService.js';
 import { fromZonedTime } from 'date-fns-tz';
-import { addDays, subDays } from 'date-fns';
 import mongoose from 'mongoose';
 
 const TIMEZONE = 'Asia/Kolkata';
+const TEST_DATE_STR = '2026-11-18'; // Future Wednesday
 
 describe('Phase 4: Booking, Cancellation, Rescheduling & Concurrency Tests', () => {
   let patient;
   let doctor;
 
+  // Cleanup helper for the test date to guarantee test isolation
+  async function cleanupTestAppointments() {
+    if (!doctor) return;
+    const testDateStart = fromZonedTime(`${TEST_DATE_STR} 00:00:00`, TIMEZONE);
+    const testDateEnd = fromZonedTime(`${TEST_DATE_STR} 23:59:59`, TIMEZONE);
+    await Appointment.deleteMany({
+      doctorId: doctor._id,
+      slotStartTime: { $gte: testDateStart, $lte: testDateEnd },
+    });
+  }
+
   beforeAll(async () => {
     await connectDB();
     patient = await User.findOne({ role: 'patient' });
     doctor = await Doctor.findOne({ specialty: 'Cardiology' });
+    await cleanupTestAppointments();
   }, 30000);
 
   afterAll(async () => {
+    await cleanupTestAppointments();
     await mongoose.disconnect();
   }, 30000);
 
+  beforeEach(async () => {
+    await cleanupTestAppointments();
+  });
+
   it('1. Successfully books a valid future appointment slot', async () => {
-    // Choose a future Wednesday at 10:00 AM clinic time
-    // Wednesday = day 3, Dr. Sarah Jenkins works 09:00 - 17:00
-    const targetDateStr = '2026-11-18'; // Wednesday
-    const slotStartTime = fromZonedTime(`${targetDateStr} 10:00:00`, TIMEZONE).toISOString();
+    const slotStartTime = fromZonedTime(`${TEST_DATE_STR} 10:00:00`, TIMEZONE).toISOString();
 
     const appointment = await bookingService.bookAppointment({
       patientId: patient._id,
@@ -44,8 +58,7 @@ describe('Phase 4: Booking, Cancellation, Rescheduling & Concurrency Tests', () 
   });
 
   it('2. Prevents simultaneous double-booking via database compound unique index', async () => {
-    const targetDateStr = '2026-11-18';
-    const collisionSlotTime = fromZonedTime(`${targetDateStr} 10:30:00`, TIMEZONE).toISOString();
+    const collisionSlotTime = fromZonedTime(`${TEST_DATE_STR} 10:30:00`, TIMEZONE).toISOString();
 
     // Patient 1 books the slot first
     const appt1 = await bookingService.bookAppointment({
@@ -98,8 +111,7 @@ describe('Phase 4: Booking, Cancellation, Rescheduling & Concurrency Tests', () 
   });
 
   it('4. Enforces 2-hour cancellation rule: rejects cancellation if fewer than 2 hours remain', async () => {
-    const targetDateStr = '2026-11-18';
-    const slotTime = fromZonedTime(`${targetDateStr} 14:00:00`, TIMEZONE);
+    const slotTime = fromZonedTime(`${TEST_DATE_STR} 14:00:00`, TIMEZONE);
 
     // Create an appointment at 14:00
     const appt = await bookingService.bookAppointment({
@@ -110,7 +122,7 @@ describe('Phase 4: Booking, Cancellation, Rescheduling & Concurrency Tests', () 
     });
 
     // Attempt cancellation at 12:30 on the same day (1.5 hours before start)
-    const simulatedNow = fromZonedTime(`${targetDateStr} 12:30:00`, TIMEZONE);
+    const simulatedNow = fromZonedTime(`${TEST_DATE_STR} 12:30:00`, TIMEZONE);
 
     let error;
     try {
@@ -130,8 +142,7 @@ describe('Phase 4: Booking, Cancellation, Rescheduling & Concurrency Tests', () 
   });
 
   it('5. Successfully cancels appointment when > 2 hours remain and frees the slot', async () => {
-    const targetDateStr = '2026-11-18';
-    const slotTime = fromZonedTime(`${targetDateStr} 15:00:00`, TIMEZONE);
+    const slotTime = fromZonedTime(`${TEST_DATE_STR} 15:00:00`, TIMEZONE);
 
     const appt = await bookingService.bookAppointment({
       patientId: patient._id,
@@ -141,7 +152,7 @@ describe('Phase 4: Booking, Cancellation, Rescheduling & Concurrency Tests', () 
     });
 
     // Cancel 5 hours in advance
-    const simulatedNow = fromZonedTime(`${targetDateStr} 10:00:00`, TIMEZONE);
+    const simulatedNow = fromZonedTime(`${TEST_DATE_STR} 10:00:00`, TIMEZONE);
     const cancelled = await bookingService.cancelAppointment({
       appointmentId: appt._id,
       userId: patient._id,
@@ -166,9 +177,8 @@ describe('Phase 4: Booking, Cancellation, Rescheduling & Concurrency Tests', () 
   });
 
   it('6. Enforces 2-hour rescheduling rule and successfully reschedules when valid', async () => {
-    const targetDateStr = '2026-11-18';
-    const oldSlotTime = fromZonedTime(`${targetDateStr} 11:00:00`, TIMEZONE);
-    const newSlotTime = fromZonedTime(`${targetDateStr} 16:00:00`, TIMEZONE);
+    const oldSlotTime = fromZonedTime(`${TEST_DATE_STR} 11:00:00`, TIMEZONE);
+    const newSlotTime = fromZonedTime(`${TEST_DATE_STR} 16:00:00`, TIMEZONE);
 
     const appt = await bookingService.bookAppointment({
       patientId: patient._id,
@@ -198,8 +208,7 @@ describe('Phase 4: Booking, Cancellation, Rescheduling & Concurrency Tests', () 
   });
 
   it('7. Allows doctor to update appointment status to completed and no-show', async () => {
-    const targetDateStr = '2026-11-18';
-    const slotTime = fromZonedTime(`${targetDateStr} 11:30:00`, TIMEZONE);
+    const slotTime = fromZonedTime(`${TEST_DATE_STR} 11:30:00`, TIMEZONE);
 
     const appt = await bookingService.bookAppointment({
       patientId: patient._id,
