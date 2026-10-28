@@ -147,6 +147,7 @@ export async function cancelAppointment({
   appointmentId,
   userId,
   userRole = 'patient',
+  doctorId,
   reason = 'Cancelled by user',
   now = new Date(),
 }) {
@@ -158,7 +159,25 @@ export async function cancelAppointment({
   }
 
   // Check authorization / ownership
-  if (userRole === 'patient' && appointment.patientId.toString() !== userId.toString()) {
+  if (
+    userRole === 'patient' &&
+    appointment.patientId.toString() !== userId?.toString()
+  ) {
+    const err = new Error('You are not authorized to cancel this appointment');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (
+    userRole === 'doctor' &&
+    (!doctorId || appointment.doctorId.toString() !== doctorId.toString())
+  ) {
+    const err = new Error('You are not authorized to cancel this appointment');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (!['patient', 'doctor'].includes(userRole)) {
     const err = new Error('You are not authorized to cancel this appointment');
     err.statusCode = 403;
     throw err;
@@ -302,14 +321,14 @@ export async function updateAppointmentStatus({ appointmentId, doctorId, status,
   }
 
   // Verify doctor ownership
-  if (doctorId && appointment.doctorId.toString() !== doctorId.toString()) {
+  if (!doctorId || appointment.doctorId.toString() !== doctorId.toString()) {
     const err = new Error('You are not authorized to update this appointment');
     err.statusCode = 403;
     throw err;
   }
 
-  if (appointment.status === 'cancelled') {
-    const err = new Error('Cannot update status of a cancelled appointment');
+  if (appointment.status !== 'booked') {
+    const err = new Error(`Cannot update status of an appointment with status '${appointment.status}'`);
     err.statusCode = 400;
     throw err;
   }

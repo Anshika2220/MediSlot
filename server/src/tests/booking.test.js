@@ -11,28 +11,70 @@ const TEST_DATE_STR = '2026-11-18'; // Future Wednesday
 
 describe('Phase 4: Booking, Cancellation, Rescheduling & Concurrency Tests', () => {
   let patient;
+  let otherPatient;
   let doctor;
+  let otherDoctor;
 
-  // Cleanup helper for the test date to guarantee test isolation
+  // Keep each suite's fixtures and appointment cleanup inside the test database.
   async function cleanupTestAppointments() {
     if (!doctor) return;
     const testDateStart = fromZonedTime(`${TEST_DATE_STR} 00:00:00`, TIMEZONE);
     const testDateEnd = fromZonedTime(`${TEST_DATE_STR} 23:59:59`, TIMEZONE);
     await Appointment.deleteMany({
-      doctorId: doctor._id,
+      doctorId: { $in: [doctor._id, otherDoctor?._id].filter(Boolean) },
       slotStartTime: { $gte: testDateStart, $lte: testDateEnd },
     });
   }
 
   beforeAll(async () => {
     await connectDB();
-    patient = await User.findOne({ role: 'patient' });
-    doctor = await Doctor.findOne({ specialty: 'Cardiology' });
+    await Appointment.init();
+    const suffix = Date.now();
+    patient = await User.create({
+      name: 'Booking Test Patient',
+      email: `booking.patient.${suffix}@medislot.test`,
+      password: 'test-password-123',
+      role: 'patient',
+    });
+    otherPatient = await User.create({
+      name: 'Other Booking Patient',
+      email: `booking.other-patient.${suffix}@medislot.test`,
+      password: 'test-password-123',
+      role: 'patient',
+    });
+    const doctorUser = await User.create({
+      name: 'Booking Test Doctor',
+      email: `booking.doctor.${suffix}@medislot.test`,
+      password: 'test-password-123',
+      role: 'doctor',
+    });
+    const otherDoctorUser = await User.create({
+      name: 'Other Booking Doctor',
+      email: `booking.other-doctor.${suffix}@medislot.test`,
+      password: 'test-password-123',
+      role: 'doctor',
+    });
+    doctor = await Doctor.create({
+      userId: doctorUser._id,
+      name: 'Dr. Sarah Jenkins',
+      specialty: 'Cardiology',
+      slotDuration: 30,
+    });
+    otherDoctor = await Doctor.create({
+      userId: otherDoctorUser._id,
+      name: 'Other Test Doctor',
+      specialty: 'Cardiology',
+      slotDuration: 30,
+    });
     await cleanupTestAppointments();
   }, 30000);
 
   afterAll(async () => {
     await cleanupTestAppointments();
+    await Doctor.deleteMany({ _id: { $in: [doctor?._id, otherDoctor?._id].filter(Boolean) } });
+    await User.deleteMany({
+      _id: { $in: [patient?._id, otherPatient?._id, doctor?.userId, otherDoctor?.userId].filter(Boolean) },
+    });
     await mongoose.disconnect();
   }, 30000);
 
@@ -57,36 +99,33 @@ describe('Phase 4: Booking, Cancellation, Rescheduling & Concurrency Tests', () 
     expect(appointment.reason).toBe('General Heart Checkup');
   });
 
-  it('2. Prevents simultaneous double-booking via database compound unique index', async () => {
+  it('2. Prevents concurrent double-booking via database compound unique index', async () => {
     const collisionSlotTime = fromZonedTime(`${TEST_DATE_STR} 10:30:00`, TIMEZONE).toISOString();
 
-    // Patient 1 books the slot first
-    const appt1 = await bookingService.bookAppointment({
-      patientId: patient._id,
-      doctorId: doctor._id,
-      slotStartTime: collisionSlotTime,
-      reason: 'Initial reservation',
-      now: new Date('2026-11-01T00:00:00Z'),
-    });
-    expect(appt1.status).toBe('booked');
-
-    // Attempt concurrent double-booking of the exact same doctor and slot
-    let error;
-    try {
-      await bookingService.bookAppointment({
+    const results = await Promise.allSettled([
+      bookingService.bookAppointment({
         patientId: patient._id,
         doctorId: doctor._id,
         slotStartTime: collisionSlotTime,
-        reason: 'Simultaneous duplicate booking attempt',
+        reason: 'Concurrent reservation one',
         now: new Date('2026-11-01T00:00:00Z'),
-      });
-    } catch (err) {
-      error = err;
-    }
+      }),
+      bookingService.bookAppointment({
+        patientId: otherPatient._id,
+        doctorId: doctor._id,
+        slotStartTime: collisionSlotTime,
+        reason: 'Concurrent reservation two',
+        now: new Date('2026-11-01T00:00:00Z'),
+      }),
+    ]);
 
-    expect(error).toBeDefined();
-    expect(error.statusCode).toBe(409); // 409 Conflict
-    expect(error.message).toContain('already been reserved');
+    const successfulBookings = results.filter((result) => result.status === 'fulfilled');
+    const failedBookings = results.filter((result) => result.status === 'rejected');
+    expect(successfulBookings).toHaveLength(1);
+    expect(successfulBookings[0].value.status).toBe('booked');
+    expect(failedBookings).toHaveLength(1);
+    expect(failedBookings[0].reason.statusCode).toBe(409);
+    expect(failedBookings[0].reason.message).toContain('already been reserved');
   });
 
   it('3. Rejects booking appointments in the past', async () => {
@@ -207,6 +246,65 @@ describe('Phase 4: Booking, Cancellation, Rescheduling & Concurrency Tests', () 
     expect(oldAppt.cancellationReason).toContain('Rescheduled');
   });
 
+  it('rejects rescheduling when fewer than two hours remain', async () => {
+    const slotStartTime = fromZonedTime(`${TEST_DATE_STR} 11:00:00`, TIMEZONE);
+    const appointment = await bookingService.bookAppointment({
+      patientId: patient._id,
+      doctorId: doctor._id,
+      slotStartTime: slotStartTime.toISOString(),
+      now: new Date('2026-11-01T00:00:00Z'),
+    });
+
+    await expect(
+      bookingService.rescheduleAppointment({
+        appointmentId: appointment._id,
+        newSlotStartTime: fromZonedTime(`${TEST_DATE_STR} 16:00:00`, TIMEZONE).toISOString(),
+        userId: patient._id,
+        now: fromZonedTime(`${TEST_DATE_STR} 09:30:00`, TIMEZONE),
+      })
+    ).rejects.toMatchObject({ statusCode: 400, message: expect.stringContaining('fewer than 2 hours') });
+  });
+
+  it('prevents a doctor from cancelling another doctor’s appointment', async () => {
+    const appointment = await bookingService.bookAppointment({
+      patientId: patient._id,
+      doctorId: doctor._id,
+      slotStartTime: fromZonedTime(`${TEST_DATE_STR} 14:00:00`, TIMEZONE).toISOString(),
+      now: new Date('2026-11-01T00:00:00Z'),
+    });
+
+    await expect(
+      bookingService.cancelAppointment({
+        appointmentId: appointment._id,
+        userId: otherDoctor.userId,
+        userRole: 'doctor',
+        doctorId: otherDoctor._id,
+        now: fromZonedTime(`${TEST_DATE_STR} 10:00:00`, TIMEZONE),
+      })
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    const unchangedAppointment = await Appointment.findById(appointment._id);
+    expect(unchangedAppointment.status).toBe('booked');
+  });
+
+  it('prevents a patient from cancelling another patient’s appointment', async () => {
+    const appointment = await bookingService.bookAppointment({
+      patientId: patient._id,
+      doctorId: doctor._id,
+      slotStartTime: fromZonedTime(`${TEST_DATE_STR} 15:00:00`, TIMEZONE).toISOString(),
+      now: new Date('2026-11-01T00:00:00Z'),
+    });
+
+    await expect(
+      bookingService.cancelAppointment({
+        appointmentId: appointment._id,
+        userId: otherPatient._id,
+        userRole: 'patient',
+        now: fromZonedTime(`${TEST_DATE_STR} 10:00:00`, TIMEZONE),
+      })
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
   it('7. Allows doctor to update appointment status to completed and no-show', async () => {
     const slotTime = fromZonedTime(`${TEST_DATE_STR} 11:30:00`, TIMEZONE);
 
@@ -227,5 +325,34 @@ describe('Phase 4: Booking, Cancellation, Rescheduling & Concurrency Tests', () 
 
     expect(completed.status).toBe('completed');
     expect(completed.notes).toBe('Patient examined. Prescription provided.');
+
+    await expect(
+      bookingService.updateAppointmentStatus({
+        appointmentId: appt._id,
+        doctorId: otherDoctor._id,
+        status: 'completed',
+      })
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    await expect(
+      bookingService.updateAppointmentStatus({
+        appointmentId: appt._id,
+        doctorId: doctor._id,
+        status: 'no-show',
+      })
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    const noShowAppointment = await bookingService.bookAppointment({
+      patientId: patient._id,
+      doctorId: doctor._id,
+      slotStartTime: fromZonedTime(`${TEST_DATE_STR} 12:00:00`, TIMEZONE).toISOString(),
+      now: new Date('2026-11-01T00:00:00Z'),
+    });
+    const noShow = await bookingService.updateAppointmentStatus({
+      appointmentId: noShowAppointment._id,
+      doctorId: doctor._id,
+      status: 'no-show',
+    });
+    expect(noShow.status).toBe('no-show');
   });
 });

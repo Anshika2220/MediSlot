@@ -4,6 +4,7 @@ import { useAuth } from '../features/auth/AuthContext';
 import api from '../services/api';
 import Navbar from '../components/Navbar';
 import {
+  BarChart3,
   Calendar,
   Clock,
   User,
@@ -17,6 +18,29 @@ import {
   Stethoscope,
   Phone,
 } from 'lucide-react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+
+function getMondayDate(date = new Date()) {
+  const monday = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  return [monday.getFullYear(), String(monday.getMonth() + 1).padStart(2, '0'), String(monday.getDate()).padStart(2, '0')].join('-');
+}
+
+function getMondayFromDateString(dateString) {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return getMondayDate(new Date(year, month - 1, day));
+}
 
 export default function DoctorDashboard() {
   const { user, doctor } = useAuth();
@@ -25,6 +49,9 @@ export default function DoctorDashboard() {
   // Today's appointments state
   const [todayData, setTodayData] = useState({ appointments: [], count: 0, date: '' });
   const [loadingToday, setLoadingToday] = useState(true);
+  const [analyticsWeekStart, setAnalyticsWeekStart] = useState(getMondayDate);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [statusActionLoading, setStatusActionLoading] = useState(false);
   const [notesModalAppt, setNotesModalAppt] = useState(null);
   const [medicalNotes, setMedicalNotes] = useState('');
@@ -75,6 +102,35 @@ export default function DoctorDashboard() {
       }).catch(() => {});
     }
   }, [doctor?.id]);
+
+  useEffect(() => {
+    if (!doctor?.id) return undefined;
+
+    let isCurrentRequest = true;
+    async function loadAnalytics() {
+      setAnalyticsLoading(true);
+      try {
+        const res = await api.get('/analytics/doctor-weekly', {
+          params: { weekStart: analyticsWeekStart },
+        });
+        if (isCurrentRequest) setAnalyticsData(res.data.data);
+      } catch (err) {
+        if (isCurrentRequest) {
+          setFeedbackMsg({
+            type: 'error',
+            text: err.response?.data?.message || 'Failed to load weekly analytics',
+          });
+        }
+      } finally {
+        if (isCurrentRequest) setAnalyticsLoading(false);
+      }
+    }
+
+    loadAnalytics();
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [doctor?.id, analyticsWeekStart]);
 
   // Handle Marking Complete or No-Show
   async function handleUpdateStatus(apptId, status, notes = '') {
@@ -206,6 +262,18 @@ export default function DoctorDashboard() {
           >
             <Clock size={15} />
             Today's Appointments ({todayData.count || 0})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`pb-3 border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === 'analytics'
+                ? 'border-[var(--accent)] text-[var(--accent)]'
+                : 'border-transparent text-[var(--muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            <BarChart3 size={15} />
+            Weekly Analytics
           </button>
 
           <button
@@ -356,6 +424,105 @@ export default function DoctorDashboard() {
               </div>
             )}
           </div>
+        )}
+
+        {activeTab === 'analytics' && (
+          <section className="space-y-5 fade-in" aria-labelledby="weekly-analytics-heading">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 id="weekly-analytics-heading" className="text-base font-bold text-[var(--text)]">
+                  Weekly Practice Analytics
+                </h2>
+                <p className="text-xs text-[var(--muted)]">
+                  Appointment and schedule totals in {analyticsData?.timezone || 'the clinic timezone'}.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-[var(--muted)] sm:w-auto">
+                Week of
+                <input
+                  type="date"
+                  value={analyticsWeekStart}
+                  onChange={(event) => {
+                    if (event.target.value) setAnalyticsWeekStart(getMondayFromDateString(event.target.value));
+                  }}
+                  className="w-auto"
+                  aria-label="Choose a week for analytics"
+                />
+              </label>
+            </div>
+
+            {analyticsLoading ? (
+              <div className="py-16 flex items-center justify-center gap-3 text-xs text-[var(--muted)]" role="status">
+                <div className="spinner" /> Loading weekly analytics…
+              </div>
+            ) : analyticsData ? (
+              <>
+                <div className="grid grid-cols-2 lg:grid-cols-4 border border-[var(--border)] divide-x divide-y lg:divide-y-0 divide-[var(--border)]">
+                  {[
+                    ['Booked hours', analyticsData.totals.bookedHours],
+                    ['Available hours', analyticsData.totals.availableHours],
+                    ['Scheduled hours', analyticsData.totals.scheduledHours],
+                    ['Utilization', `${analyticsData.totals.utilizationPercent}%`],
+                  ].map(([label, value]) => (
+                    <div key={label} className="bg-[var(--surface)] p-4">
+                      <p className="text-[11px] uppercase tracking-wide text-[var(--muted)]">{label}</p>
+                      <p className="mt-1 text-xl font-semibold text-[var(--text)]">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {analyticsData.totals.scheduledHours === 0 ? (
+                  <div className="border border-[var(--border)] bg-[var(--surface)] py-12 px-4 text-center">
+                    <Calendar size={28} className="mx-auto mb-2 text-[var(--muted)]" />
+                    <h3 className="text-sm font-semibold text-[var(--text)]">No scheduled hours this week</h3>
+                    <p className="mt-1 text-xs text-[var(--muted)]">Choose another week or update your weekly schedule.</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    <div className="border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <h3 className="mb-4 text-sm font-semibold text-[var(--text)]">Booked and available hours</h3>
+                      <div className="h-72 min-w-0" role="img" aria-label="Stacked bar chart of booked and available hours from Monday through Sunday">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={analyticsData.days} margin={{ top: 8, right: 8, left: -18, bottom: 4 }}>
+                            <CartesianGrid stroke="var(--border)" vertical={false} />
+                            <XAxis dataKey="day" tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
+                            <YAxis allowDecimals={false} tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                            <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }} />
+                            <Legend />
+                            <Bar dataKey="bookedHours" name="Booked" stackId="hours" fill="var(--accent)" radius={[3, 3, 0, 0]} />
+                            <Bar dataKey="availableHours" name="Available" stackId="hours" fill="var(--info)" radius={[3, 3, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    <div className="border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <h3 className="mb-4 text-sm font-semibold text-[var(--text)]">Appointments per day</h3>
+                      <div className="h-72 min-w-0" role="img" aria-label="Line chart of appointment counts from Monday through Sunday">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={analyticsData.days} margin={{ top: 8, right: 8, left: -18, bottom: 4 }}>
+                            <CartesianGrid stroke="var(--border)" vertical={false} />
+                            <XAxis dataKey="day" tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
+                            <YAxis allowDecimals={false} tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                            <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }} />
+                            <Line type="monotone" dataKey="appointmentCount" name="Appointments" stroke="var(--success)" strokeWidth={2} dot={{ r: 3, fill: 'var(--success)' }} activeDot={{ r: 5 }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-[11px] text-[var(--muted)]">
+                  Capacity excludes scheduled breaks and blocked dates. Cancelled appointments are excluded; overlapping persisted appointments count occupied time once. Seeded demo appointments are included when present.
+                </p>
+              </>
+            ) : (
+              <div className="border border-[var(--border)] bg-[var(--surface)] py-12 px-4 text-center text-xs text-[var(--muted)]">
+                Analytics are unavailable for this week.
+              </div>
+            )}
+          </section>
         )}
 
         {/* TAB 2: Weekly Schedule & Slot Duration */}

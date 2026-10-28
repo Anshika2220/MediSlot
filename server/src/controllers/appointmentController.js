@@ -119,13 +119,15 @@ export async function cancelAppointmentEndpoint(req, res, next) {
   try {
     const { id } = req.params;
     const { reason } = req.body;
-    const userId = req.user?._id || req.body.userId || req.headers['x-user-id'];
-    const userRole = req.user?.role || req.body.role || 'patient';
+    const userId = req.user._id;
+    const userRole = req.user.role;
+    const doctorId = req.user.doctorId;
 
     const appointment = await bookingService.cancelAppointment({
       appointmentId: id,
       userId,
       userRole,
+      doctorId,
       reason,
     });
 
@@ -176,7 +178,7 @@ export async function updateStatusEndpoint(req, res, next) {
   try {
     const { id } = req.params;
     const { status, notes } = req.body;
-    const doctorId = req.user?.doctorId || req.body.doctorId || req.headers['x-doctor-id'];
+    const doctorId = req.user.doctorId;
 
     const appointment = await bookingService.updateAppointmentStatus({
       appointmentId: id,

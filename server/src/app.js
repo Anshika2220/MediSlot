@@ -18,6 +18,8 @@ import healthRouter from './routes/health.js';
 import authRouter from './routes/authRoutes.js';
 import doctorRouter from './routes/doctorRoutes.js';
 import appointmentRouter from './routes/appointmentRoutes.js';
+import analyticsRouter from './routes/analyticsRoutes.js';
+import chatRouter from './routes/chatRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -40,6 +42,8 @@ app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/doctors', doctorRouter);
 app.use('/api/appointments', appointmentRouter);
+app.use('/api/analytics', analyticsRouter);
+app.use('/api/chat', chatRouter);
 
 // DB ping endpoint
 app.get('/api/ping', (req, res) => res.json({ pong: true, ts: Date.now() }));

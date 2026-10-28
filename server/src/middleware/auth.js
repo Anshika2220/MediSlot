@@ -44,6 +44,7 @@ export function authenticate(req, res, next) {
   }
 }
 
+
 /**
  * Role-based Authorization Middleware
  * Enforces access based on user role (e.g. 'patient' vs 'doctor')

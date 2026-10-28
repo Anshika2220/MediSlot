@@ -16,6 +16,19 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem('medislot_token'));
   const [loading, setLoading] = useState(true);
 
+  function storeSession(session) {
+    setUser(session.user);
+    setDoctor(session.doctor);
+    setToken(session.token);
+    localStorage.setItem('medislot_token', session.token);
+    localStorage.setItem('medislot_user', JSON.stringify(session.user));
+    if (session.doctor) {
+      localStorage.setItem('medislot_doctor', JSON.stringify(session.doctor));
+    } else {
+      localStorage.removeItem('medislot_doctor');
+    }
+  }
+
   // Validate and refresh session on mount
   useEffect(() => {
     async function verifySession() {
@@ -39,33 +52,13 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     const res = await api.post('/auth/login', { email, password });
-    const { user: userData, doctor: doctorData, token: jwtToken } = res.data.data;
-
-    setUser(userData);
-    setDoctor(doctorData);
-    setToken(jwtToken);
-
-    localStorage.setItem('medislot_token', jwtToken);
-    localStorage.setItem('medislot_user', JSON.stringify(userData));
-    if (doctorData) {
-      localStorage.setItem('medislot_doctor', JSON.stringify(doctorData));
-    }
+    storeSession(res.data.data);
     return res.data;
   }
 
   async function register(registrationData) {
     const res = await api.post('/auth/register', registrationData);
-    const { user: userData, doctor: doctorData, token: jwtToken } = res.data.data;
-
-    setUser(userData);
-    setDoctor(doctorData);
-    setToken(jwtToken);
-
-    localStorage.setItem('medislot_token', jwtToken);
-    localStorage.setItem('medislot_user', JSON.stringify(userData));
-    if (doctorData) {
-      localStorage.setItem('medislot_doctor', JSON.stringify(doctorData));
-    }
+    storeSession(res.data.data);
     return res.data;
   }
 

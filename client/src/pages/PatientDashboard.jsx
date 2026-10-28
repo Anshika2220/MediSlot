@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
 import api from '../services/api';
 import Navbar from '../components/Navbar';
+import BookingAssistant from '../features/chatbot/BookingAssistant';
 import {
   Calendar,
   Clock,
@@ -152,6 +153,8 @@ export default function PatientDashboard() {
             <span>{successMsg}</span>
           </div>
         )}
+
+        <BookingAssistant onBookingComplete={fetchAppointments} />
 
         {/* Tabs */}
         <div className="flex items-center gap-3 border-b border-[var(--border)] mb-6">

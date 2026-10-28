@@ -47,3 +47,4 @@ export async function getMeEndpoint(req, res, next) {
     next(err);
   }
 }
+
